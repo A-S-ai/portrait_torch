@@ -100,9 +100,9 @@ def get_args():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        '-e', '--epochs', metavar='E', type=int, default=5, help='Number of epochs', dest='epochs')
+        '-e', '--epochs', metavar='E', type=int, default=20, help='Number of epochs', dest='epochs')
     parser.add_argument(
-        '-b', '--batch-size', metavar='B', type=int, nargs='?', default=1, help='Batch size', dest='batchsize')
+        '-b', '--batch-size', metavar='B', type=int, nargs='?', default=128, help='Batch size', dest='batchsize')
     parser.add_argument(
         '-lr', '--learning-rate', metavar='LR', type=float, nargs='?', default=0.1, help='Learning rate', dest='lr')
     parser.add_argument(
@@ -147,4 +147,4 @@ if __name__ == '__main__':
         device=device,
         val_percent=args.val,
         img_scale=args.scale,
-        )
+    )
