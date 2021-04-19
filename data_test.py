@@ -1,5 +1,5 @@
-from os.path import join
 from os import listdir
+from os.path import join
 import numpy as np
 import pylab as plt
 import torch
@@ -8,6 +8,10 @@ import torchvision.transforms.functional as TF
 from torchvision.transforms import transforms as tfs
 import logging
 from PIL import Image
+
+
+dir_img = 'data/img1/'
+dir_mask = 'data/mask1/'
 
 
 class BasicDataset(Dataset):
@@ -29,6 +33,8 @@ class BasicDataset(Dataset):
     def preprocess(cls, pil_img):
         pil_img = pil_img.numpy()
         pil_img = pil_img.transpose((1, 2, 0))
+        print(pil_img.shape)
+        plt.imshow(pil_img)
 
         if len(pil_img.shape) == 2:
             pil_img = np.expand_dims(pil_img, axis=2)
@@ -38,6 +44,7 @@ class BasicDataset(Dataset):
         #图像归一化
         if img_trans.max() > 1:
             img_trans = img_trans / 255
+        plt.show()
         return img_trans
 
     def rand_crop(self, img, mask):
@@ -64,3 +71,5 @@ class BasicDataset(Dataset):
 
         return {'image': torch.from_numpy(img), 'mask': torch.from_numpy(mask)}
 
+dataset = BasicDataset(dir_img, dir_mask, 1)
+print(dataset[0])

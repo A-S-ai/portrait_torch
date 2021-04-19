@@ -17,7 +17,7 @@ dir_img = 'data/imgs/'
 dir_mask = 'data/masks/'
 
 
-def train_net(net, device, epochs=5, batch_size=1, lr=0.1, val_percent=0.1, save_cp=True, img_scale=0.5):
+def train_net(net, device, epochs=5, batch_size=32, lr=0.1, val_percent=0.1, save_cp=True, img_scale=0.5):
 
     dataset = BasicDataset(dir_img, dir_mask, img_scale)
     n_val = int(len(dataset) * val_percent)
@@ -117,8 +117,7 @@ def get_args():
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     args = get_args()
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = torch.device('cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f'Using device {device}')
 
     # Change here to adapt to your data
