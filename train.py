@@ -8,7 +8,7 @@ from torch import optim
 from tqdm import tqdm
 from os.path import join
 
-from eval import eval_net
+from eval import evaluate
 from model import UNet
 from utils import time_str, show_losses
 from dataset import BasicDataset
@@ -22,7 +22,7 @@ def save_model_and_loss(model, moder_root, losses, loss_root):
     logging.info('Checkpoint & Losses saved !')
 
 
-def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, pin_memory, roots):
+def train(n_channels, n_classes, bilinear, epochs, batch_size, lr, val_rate, num_workers, pin_memory, roots):
 
     data_root, model_root, log_root = roots
 
@@ -32,11 +32,11 @@ def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, 
     print("name:{}".format(torch.cuda.get_device_name(0)))
     logging.info(f'Using device {device}')
 
-    model = UNet(n_channels, n_classes).to(device)
+    model = UNet(n_channels, n_classes, bilinear).to(device)
     logging.info(f'Network:\n'
-                 f'\t{model.n_channels} input channels\n'
-                 f'\t{model.n_classes} output channels (classes)\n'
-                 f'\t{"Bilinear" if model.bilinear else "Dilated conv"} upscaling')
+                 f'\t{n_channels} input channels\n'
+                 f'\t{n_classes} output channels (classes)\n'
+                 f'\t{"Bilinear" if bilinear else "Dilated conv"} upscaling')
 
     dataset = BasicDataset(data_root)
     num_val = int(len(dataset) * val_rate)
@@ -56,9 +56,9 @@ def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, 
         Validation item: {num_val}
         Device:          {device.type}''')
 
-    criterion = nn.CrossEntropyLoss() if model.n_classes > 1 else nn.BCEWithLogitsLoss()
+    criterion = nn.CrossEntropyLoss() if n_classes > 1 else nn.BCEWithLogitsLoss()
     optimizer = optim.RMSprop(model.parameters(), lr=lr, weight_decay=1e-8, momentum=0.9)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min' if model.n_classes > 1 else 'max', patience=2)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min' if n_classes > 1 else 'max', patience=2)
 
     losses = []
     global_step = 0
@@ -77,7 +77,7 @@ def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, 
                 # cv2.imshow('figure2', mask[0].permute(1, 2, 0).numpy())
                 # cv2.waitKey()
 
-                mask_type = torch.float32 if model.n_classes == 1 else torch.long
+                mask_type = torch.float32 if n_classes == 1 else torch.long
                 mask = mask.to(device=device, dtype=mask_type)
                 img = img.to(device=device, dtype=torch.float32)
 
@@ -99,9 +99,11 @@ def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, 
                 # value
                 global_step += 1
                 if global_step % (len(dataset) // (10 * batch_size)) == 0:
-                    score = eval_net(model, val_loader, device, num_val)
+                    score = evaluate(model, val_loader, n_classes, device, num_val)
+                    model.train()
                     scheduler.step(score)
-                    if model.n_classes > 1:
+
+                    if n_classes > 1:
                         logging.info('Validation cross entropy: {}'.format(score))
                         writer.add_scalar('Loss/test', score, global_step)
                     else:
@@ -109,7 +111,7 @@ def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, 
                         writer.add_scalar('Dice/test', score, global_step)
 
                     writer.add_images('images', img, global_step)
-                    if model.n_classes == 1:
+                    if n_classes == 1:
                         writer.add_images('masks/true', mask, global_step)
                         writer.add_images('masks/pred', torch.sigmoid(pred) > 0.5, global_step)
 
@@ -127,5 +129,5 @@ args = parser.parse_args()
 if __name__ == '__main__':
     cf = Config(args.server)
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-    train(cf.num_channels, cf.num_classes, cf.epoch, cf.batch_size,
+    train(cf.num_channels, cf.num_classes, cf.bilinear, cf.epoch, cf.batch_size,
           cf.lr, cf.val_rate, cf.num_workers, cf.pin_m, cf.roots())

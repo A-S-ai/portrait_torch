@@ -4,6 +4,7 @@ class Config(object):
 
         self.num_channels = 3
         self.num_classes = 1
+        self.bilinear = True
 
         self.epoch = 20
         self.batch_size = 4

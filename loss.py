@@ -3,7 +3,7 @@ from torch.autograd import Function
 
 
 class DiceCoeff(Function):
-    """Dice coeff for individual examples"""
+    """ Dice coeff for individual examples """
 
     def forward(self, input, target):
         self.save_for_backward(input, target)
