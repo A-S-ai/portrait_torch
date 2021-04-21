@@ -15,10 +15,6 @@ from dataset import BasicDataset
 from config import Config
 
 
-dir_img = 'data/supervisely/imgs/'
-dir_mask = 'data/supervisely/masks/'
-
-
 def save_model_and_loss(model, moder_root, losses, loss_root):
     t_str = time_str()
     torch.save(model.state_dict(), join(moder_root, 'model_' + t_str + '.pth'))
@@ -26,7 +22,9 @@ def save_model_and_loss(model, moder_root, losses, loss_root):
     logging.info('Checkpoint & Losses saved !')
 
 
-def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, config):
+def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, pin_memory, roots):
+
+    data_root, model_root, log_root = roots
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(torch.cuda.get_device_properties(device))
@@ -40,13 +38,13 @@ def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, 
                  f'\t{model.n_classes} output channels (classes)\n'
                  f'\t{"Bilinear" if model.bilinear else "Dilated conv"} upscaling')
 
-    dataset = BasicDataset(dir_img, dir_mask)
+    dataset = BasicDataset(data_root)
     num_val = int(len(dataset) * val_rate)
     num_train = len(dataset) - num_val
 
     train_date, val_data = random_split(dataset, [num_train, num_val])
-    train_loader = DataLoader(train_date, batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_data, batch_size, shuffle=False, num_workers=num_workers)
+    train_loader = DataLoader(train_date, batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_data, batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
 
     writer = SummaryWriter(comment=f'LR_{lr}_BS_{batch_size}')
 
@@ -115,17 +113,19 @@ def train(n_channels, n_classes, epochs, batch_size, lr, val_rate, num_workers, 
                         writer.add_images('masks/true', mask, global_step)
                         writer.add_images('masks/pred', torch.sigmoid(pred) > 0.5, global_step)
 
-        save_model_and_loss(model, config.model_root, losses, config.log_root)
+        save_model_and_loss(model, model_root, losses, log_root)
 
     writer.close()
 
 
 parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
 parser.add_argument('-s', '--server', type=bool, action='store_true', help='Whether use server training')
+# parser.add_argument('-d', '--dataset', type=str, default='', help='dataset name')
 args = parser.parse_args()
 
 
 if __name__ == '__main__':
     cf = Config(args.server)
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-    train(cf.num_channels, cf.num_classes, cf.epoch, cf.batch_size, cf.lr, cf.val_rate, cf.num_workers, cf)
+    train(cf.num_channels, cf.num_classes, cf.epoch, cf.batch_size,
+          cf.lr, cf.val_rate, cf.num_workers, cf.pin_m, cf.roots())
