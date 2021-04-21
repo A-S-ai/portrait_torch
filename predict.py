@@ -30,13 +30,13 @@ def predict_img(model, img, device, out_threshold=0.5):
         pred = pred.squeeze(0)
         print(torch.max(pred))
 
-        trans = tfs.Compose([
-                tfs.ToPILImage(),
-                tfs.Resize(img.size[1]),
-                tfs.ToTensor()
-        ])
+        # trans = tfs.Compose([
+        #         tfs.ToPILImage(),
+        #         tfs.Resize(img.size[1]),
+        #         tfs.ToTensor()
+        # ])
 
-        pred = trans(pred.cpu())
+        pred = pred.cpu()
         full_mask = pred.squeeze().cpu().numpy()
 
     return full_mask > out_threshold
@@ -45,7 +45,7 @@ def predict_img(model, img, device, out_threshold=0.5):
 def get_args():
     parser = argparse.ArgumentParser(description='Predict masks from input images',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--model', '-m', default='model.pth',
+    parser.add_argument('--model', '-m', default='./result/MODEL-1.pth',
                         metavar='FILE',
                         help="Specify the file in which the model is stored")
     parser.add_argument('--input', '-i', metavar='INPUT', nargs='+',
