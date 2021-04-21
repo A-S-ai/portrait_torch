@@ -1,50 +1,43 @@
 import argparse
 import logging
 import os
-
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torchvision.transforms as tfs
 from PIL import Image
-from torchvision import transforms
 
-from unet import UNet
-from utils.data_vis import plot_img_and_mask
-from utils.dataset import BasicDataset
+from model import UNet
+from utils import plot_img_and_mask
 
 
-def predict_img(net,
-                full_img,
-                device,
-                scale_factor=1,
-                out_threshold=0.5):
-    net.eval()
+def predict_img(model, img, device, out_threshold=0.5):
 
-    img = torch.from_numpy(BasicDataset.preprocess(full_img, scale_factor))
-
+    model.eval()
     img = img.unsqueeze(0)
-    img = img.to(device=device, dtype=torch.float32)
+    img = img.to(device=device)
 
     with torch.no_grad():
-        output = net(img)
+        output = model(img)
+        print(output)
+        print(torch.max(output))
 
         if net.n_classes > 1:
-            probs = F.softmax(output, dim=1)
+            pred = F.softmax(output, dim=1)
         else:
-            probs = torch.sigmoid(output)
+            pred = torch.sigmoid(output)
 
-        probs = probs.squeeze(0)
+        pred = pred.squeeze(0)
+        print(torch.max(pred))
 
-        tf = transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.Resize(full_img.size[1]),
-                transforms.ToTensor()
-            ]
-        )
+        trans = tfs.Compose([
+                tfs.ToPILImage(),
+                tfs.Resize(img.size[1]),
+                tfs.ToTensor()
+        ])
 
-        probs = tf(probs.cpu())
-        full_mask = probs.squeeze().cpu().numpy()
+        pred = trans(pred.cpu())
+        full_mask = pred.squeeze().cpu().numpy()
 
     return full_mask > out_threshold
 
@@ -52,7 +45,7 @@ def predict_img(net,
 def get_args():
     parser = argparse.ArgumentParser(description='Predict masks from input images',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--model', '-m', default='MODEL.pth',
+    parser.add_argument('--model', '-m', default='model.pth',
                         metavar='FILE',
                         help="Specify the file in which the model is stored")
     parser.add_argument('--input', '-i', metavar='INPUT', nargs='+',
@@ -99,35 +92,32 @@ def mask_to_image(mask):
 
 if __name__ == "__main__":
     args = get_args()
+
     in_files = args.input
     out_files = get_output_filenames(args)
 
-    net = UNet(n_channels=3, n_classes=1)
-
-    logging.info("Loading model {}".format(args.model))
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f'Using device {device}')
-    net.to(device=device)
+
+    net = UNet(n_channels=3, n_classes=1).to(device)
+
+    logging.info("Loading model {}".format(args.model))
     net.load_state_dict(torch.load(args.model, map_location=device))
+
     logging.info("Model loaded !")
 
     for i, fn in enumerate(in_files):
         logging.info("\nPredicting image {} ...".format(fn))
 
-        img = Image.open(fn)
+        img = Image.open(fn).convert('RGB')
+        img = tfs.ToTensor()(img)
 
-        mask = predict_img(net=net,
-                           full_img=img,
-                           scale_factor=args.scale,
-                           out_threshold=args.mask_threshold,
-                           device=device)
+        mask = predict_img(model=net, img=img, out_threshold=args.mask_threshold, device=device)
 
         if not args.no_save:
             out_fn = out_files[i]
             result = mask_to_image(mask)
             result.save(out_files[i])
-
             logging.info("Mask saved to {}".format(out_files[i]))
 
         if args.viz:

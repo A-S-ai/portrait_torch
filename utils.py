@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 
 def plot_img_and_mask(img, mask):
@@ -15,3 +16,19 @@ def plot_img_and_mask(img, mask):
         ax[1].imshow(mask)
     plt.xticks([]), plt.yticks([])
     plt.show()
+
+
+def show_losses(save_path, **kwargs):
+    plt.figure(figsize=(10, 5))
+    plt.title("Losses During Training")
+    for key, value, in kwargs.items():
+        plt.plot(value, label=key)
+    plt.xlabel("iterations")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.savefig(save_path)
+    print('saving loss at: {}'.format(save_path))
+
+
+def time_str():
+    return datetime.now().strftime('_%m%d%H%M')
