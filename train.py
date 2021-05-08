@@ -11,18 +11,18 @@ from os.path import join
 from eval import evaluate
 from model import UNet
 from utils import time_str, show_losses
-from dataset import BasicDataset
+from dataset import SuperviselyDataset
 from config import Config
 
 
 def save_model_and_loss(model, moder_root, losses, loss_root):
     t_str = time_str()
-    torch.save(model.state_dict(), join(moder_root, 'model_' + t_str + '.pth'))
-    show_losses(join(loss_root, 'loss_' + t_str + '.png'), losses=losses)
+    torch.save(model.state_dict(), join(moder_root, 'model' + t_str + '.pth'))
+    show_losses(join(loss_root, 'loss' + t_str + '.png'), losses=losses)
     logging.info('Checkpoint & Losses saved !')
 
 
-def train(n_channels, n_classes, bilinear, epochs, batch_size, lr, val_rate, num_workers, pin_memory, roots):
+def train(n_channels, n_classes, bilinear, epochs, batch_size, lr, val_rate, num_workers, pin_memory, roots, threshold):
 
     data_root, model_root, log_root = roots
 
@@ -38,7 +38,7 @@ def train(n_channels, n_classes, bilinear, epochs, batch_size, lr, val_rate, num
                  f'\t{n_classes} output channels (classes)\n'
                  f'\t{"Bilinear" if bilinear else "Dilated conv"} upscaling')
 
-    dataset = BasicDataset(data_root)
+    dataset = SuperviselyDataset(data_root)
     num_val = int(len(dataset) * val_rate)
     num_train = len(dataset) - num_val
 
@@ -49,16 +49,17 @@ def train(n_channels, n_classes, bilinear, epochs, batch_size, lr, val_rate, num
     writer = SummaryWriter(comment=f'LR_{lr}_BS_{batch_size}')
 
     logging.info(f'''Starting training:
-        Epochs:          {epochs}
-        Batch size:      {batch_size}
-        Learning rate:   {lr}
-        Training item:   {num_train}
-        Validation item: {num_val}
-        Device:          {device.type}''')
+        Epochs:                     {epochs}
+        Batch size:                 {batch_size}
+        Learning rate (original):   {lr}
+        Training item:              {num_train}
+        Validation item:            {num_val}
+        Device:                     {device.type}''')
 
-    criterion = nn.CrossEntropyLoss() if n_classes > 1 else nn.BCEWithLogitsLoss()
+    # criterion = nn.CrossEntropyLoss() if n_classes > 1 else nn.BCEWithLogitsLoss()
+    criterion = nn.MSELoss()
     optimizer = optim.RMSprop(model.parameters(), lr=lr, weight_decay=1e-8, momentum=0.9)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min' if n_classes > 1 else 'max', patience=2)
+    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min' if n_classes > 1 else 'max', patience=2)
 
     losses = []
     global_step = 0
@@ -91,29 +92,31 @@ def train(n_channels, n_classes, bilinear, epochs, batch_size, lr, val_rate, num
                 optimizer.step()
 
                 losses.append(loss.item())
-                writer.add_scalar('Loss/train', loss.item(), global_step)
+                # writer.add_scalar('Loss/train', loss.item(), global_step)
 
-                t.set_postfix(loss='{:.6f}'.format(loss))
+                t.set_postfix(loss='{:.6f}'.format(loss), lr='%.8f' % optimizer.param_groups[0]['lr'])
                 t.update(img.shape[0])
 
                 # value
-                global_step += 1
-                if global_step % (len(dataset) // (10 * batch_size)) == 0:
-                    score = evaluate(model, val_loader, n_classes, device, num_val)
-                    model.train()
-                    scheduler.step(score)
+                # global_step += 1
+                # if global_step % (len(dataset) // (10 * batch_size)) == 0:
 
-                    if n_classes > 1:
-                        logging.info('Validation cross entropy: {}'.format(score))
-                        writer.add_scalar('Loss/test', score, global_step)
-                    else:
-                        logging.info('Validation Dice Coeff: {}'.format(score))
-                        writer.add_scalar('Dice/test', score, global_step)
+            # score = evaluate(model, val_loader, n_classes, device, num_val)
+            # model.train()
+            # logging.info('Validation Dice Coeff: {}'.format(score))
+            # scheduler.step(score)
 
-                    writer.add_images('images', img, global_step)
-                    if n_classes == 1:
-                        writer.add_images('masks/true', mask, global_step)
-                        writer.add_images('masks/pred', torch.sigmoid(pred) > 0.5, global_step)
+                    # if n_classes > 1:
+                    #     logging.info('Validation cross entropy: {}'.format(score))
+                    #     writer.add_scalar('Loss/test', score, global_step)
+                    # else:
+                    #     logging.info('Validation Dice Coeff: {}'.format(score))
+                    #     writer.add_scalar('Dice/test', score, global_step)
+                    #
+                    # writer.add_images('images', img, global_step)
+                    # if n_classes == 1:
+                    #     writer.add_images('masks/true', mask, global_step)
+                    #     writer.add_images('masks/pred', torch.sigmoid(pred) > threshold, global_step)
 
         save_model_and_loss(model, model_root, losses, log_root)
 
@@ -121,7 +124,7 @@ def train(n_channels, n_classes, bilinear, epochs, batch_size, lr, val_rate, num
 
 
 parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
-parser.add_argument('-s', '--server', type=bool, action='store_true', help='Whether use server training')
+parser.add_argument('-s', '--server', action='store_true', help='Whether use server training')
 # parser.add_argument('-d', '--dataset', type=str, default='', help='dataset name')
 args = parser.parse_args()
 
@@ -130,4 +133,4 @@ if __name__ == '__main__':
     cf = Config(args.server)
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     train(cf.num_channels, cf.num_classes, cf.bilinear, cf.epoch, cf.batch_size,
-          cf.lr, cf.val_rate, cf.num_workers, cf.pin_m, cf.roots())
+          cf.lr, cf.val_rate, cf.num_workers, cf.pin_m, cf.roots(), cf.threshold)

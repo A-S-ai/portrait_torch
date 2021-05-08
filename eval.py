@@ -28,7 +28,7 @@ def evaluate(model, dataloader, num_classes, device, num_val):
             #     else:
             #         tot += dice_coeff(pred, mask.squeeze(dim=1)).item()
 
-            if model.n_classes > 1:
+            if num_classes > 1:
                 total += F.cross_entropy(pred, mask).item()
             else:
                 pred = torch.sigmoid(pred)

@@ -1,19 +1,22 @@
-from os.path import join
+from os.path import join,splitext
 from os import listdir
-import torch
 from torch.utils.data import Dataset
-import torchvision.transforms.functional as F
 from torchvision.transforms import transforms as tfs
-import logging
 from PIL import Image
+import torchvision.transforms.functional as F
+import logging
+import glob
+import cv2
+import random
 
 
-class BasicDataset(Dataset):
+class SuperviselyDataset(Dataset):
 
-    def __init__(self, img_dir, mask_dir):
-        self.img_dir = img_dir
-        self.mask_dir = mask_dir
-        self.data = [file for file in listdir(img_dir) if not file.startswith('.')]
+    def __init__(self, data_root):
+        self.name = 'supervisely'
+        self.img_root = join(data_root, self.name, 'himgs')
+        self.mask_root = join(data_root, self.name, 'hmasks')
+        self.data = [file for file in listdir(self.img_root) if not file.startswith('.')]
         self.img_trans, self.mask_trans = self.default_transform()
 
         logging.info(f'Creating dataset with {len(self.data)} examples')
@@ -43,14 +46,7 @@ class BasicDataset(Dataset):
         # HWC to CHW
         # img = img.permute(2, 0, 1)
         # print(img.shape)
-        # 图像归一化
-        # import matplotlib.pyplot as plt
-        # print(type(img))
-        # plt.imshow(img.permute(1, 2, 0), cmap='gray')
-        # plt.show()
-        if img.max() > 1:
-            img = img / 255.0
-        return img
+        pass
 
     def rand_crop(self, img, mask, new_size):
         img = self.img_trans(img)
@@ -64,14 +60,52 @@ class BasicDataset(Dataset):
 
     def __getitem__(self, i):
         file_name = self.data[i]
-        mask_file = join(self.mask_dir, file_name)
-        img_file = join(self.img_dir, file_name)
+        basefile_name = splitext(self.data[i])
+        mask_file_name = basefile_name[0] + '_matte' + basefile_name[1]
+        mask_file = join(self.mask_root, mask_file_name)
+        img_file = join(self.img_root, file_name)
 
         img = Image.open(img_file)
         mask = Image.open(mask_file)
-
         img, mask = self.rand_crop(img, mask, (300, 300))
-        # img = self.preprocess(img)
-        # mask = self.preprocess(mask)
-
         return img, mask
+
+
+class IsbiDataset(Dataset):
+
+    def __init__(self, data_root):
+        self.name = 'ISBI'
+        self.data_path = join(data_root, self.name, 'train')
+        self.imgs_path = glob.glob(join(self.data_path, 'image/*.png'))
+
+    def augment(self, image, flipCode):
+        # 使用cv2.flip进行数据增强，filpCode为1水平翻转，0垂直翻转，-1水平+垂直翻转
+        flip = cv2.flip(image, flipCode)
+        return flip
+
+    def __getitem__(self, index):
+        # 根据index读取图片
+        image_path = self.imgs_path[index]
+        # 根据image_path生成label_path
+        label_path = image_path.replace('image', 'label')
+        # 读取训练图片和标签图片
+        image = cv2.imread(image_path)
+        label = cv2.imread(label_path)
+        # 将数据转为单通道的图片
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        label = cv2.cvtColor(label, cv2.COLOR_BGR2GRAY)
+        image = image.reshape(1, image.shape[0], image.shape[1])
+        label = label.reshape(1, label.shape[0], label.shape[1])
+        # 处理标签，将像素值为255的改为1
+        if label.max() > 1:
+            label = label / 255
+        # 随机进行数据增强，为2时不做处理
+        flipCode = random.choice([-1, 0, 1, 2])
+        if flipCode != 2:
+            image = self.augment(image, flipCode)
+            label = self.augment(label, flipCode)
+        return image, label
+
+    def __len__(self):
+        # 返回训练集大小
+        return len(self.imgs_path)

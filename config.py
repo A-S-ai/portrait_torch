@@ -9,6 +9,8 @@ class Config(object):
         self.epoch = 20
         self.batch_size = 4
         self.lr = 0.0001
+        self.val_rate = 0.15
+        self.threshold = 0.5
         self.val_rate = 0.1
         self.num_workers = 2
         self.pin_m = False
